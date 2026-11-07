@@ -5,15 +5,16 @@ from app.core.database import get_db
 from app.core.security import get_current_user,require_roles
 from app.models.user import User,UserRole
 from app.models.workspace import Workspace,Guideline,GuidelineClause,TerminologyEntry,ApprovedFact
-from app.schemas.workspace import WorkspaceCreate,WorkspaceOut,GuidelineOut,TerminologyCreate,TerminologyOut,FactCreate,FactOut
+from app.schemas.workspace import WorkspaceCreate,WorkspaceUpdate,WorkspaceOut,GuidelineOut,TerminologyCreate,TerminologyOut,FactCreate,FactOut
 from app.services.rules_engine import split_into_clauses,infer_category
-import os,shutil
+from app.services.file_parser import parse_document
+import os,shutil,uuid
 
 router=APIRouter(prefix="/api/workspaces",tags=["workspaces"])
 
 @router.post("",response_model=WorkspaceOut,status_code=201)
 def create_workspace(payload:WorkspaceCreate,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
-    ws=Workspace(name=payload.name,description=payload.description)
+    ws=Workspace(**payload.model_dump())
     db.add(ws)
     db.commit()
     db.refresh(ws)
@@ -32,6 +33,18 @@ def get_workspace(workspace_id:int,db:Session=Depends(get_db),current_user:User=
         raise HTTPException(404,"Workspace not found")
     return ws
 
+@router.patch("/{workspace_id}",response_model=WorkspaceOut)
+def update_workspace(workspace_id:int,payload:WorkspaceUpdate,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    ws=db.query(Workspace).filter(Workspace.id==workspace_id).first()
+    if not ws:
+        raise HTTPException(404,"Workspace not found")
+    data=payload.model_dump(exclude_unset=True)
+    for k,v in data.items():
+        setattr(ws,k,v)
+    db.commit()
+    db.refresh(ws)
+    return ws
+
 @router.post("/{workspace_id}/guidelines",response_model=GuidelineOut,status_code=201)
 def import_guideline(
     workspace_id:int,
@@ -48,11 +61,13 @@ def import_guideline(
     fname=None
     if file:
         fname=file.filename
-        content=file.file.read()
-        if fname.endswith('.txt'):
-            raw=content.decode('utf-8','ignore')
-        else:
-            raw=content.decode('utf-8','ignore')
+        os.makedirs("uploads",exist_ok=True)
+        suffix=os.path.splitext(file.filename)[1].lower()
+        fpath=os.path.join("uploads",f"{uuid.uuid4().hex}{suffix}")
+        with open(fpath,"wb") as buffer:
+            shutil.copyfileobj(file.file,buffer)
+        parsed=parse_document(fpath)
+        raw=parsed.get('text','')
     elif text_content:
         raw=text_content
     if not raw.strip():
@@ -118,4 +133,3 @@ def add_fact(workspace_id:int,payload:FactCreate,db:Session=Depends(get_db),curr
 @router.get("/{workspace_id}/facts",response_model=List[FactOut])
 def list_facts(workspace_id:int,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
     return db.query(ApprovedFact).filter(ApprovedFact.workspace_id==workspace_id).all()
-

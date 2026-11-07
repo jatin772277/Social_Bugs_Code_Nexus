@@ -42,3 +42,4 @@ print('Status:',d_data['status'])
 
 r7=client.get('/api/insights/1',headers=h_mgr)
 print('Insights:',r7.json())
+

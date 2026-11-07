@@ -1,12 +1,14 @@
-from fastapi import APIRouter,Depends,HTTPException,BackgroundTasks
+from fastapi import APIRouter,Depends,HTTPException,UploadFile,File,Form
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List,Optional
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User,UserRole
-from app.models.draft import Draft,Finding,Comment,Approval,DraftStatus,FindingStatus
-from app.schemas.draft import DraftCreate,DraftOut,DraftWithFindings,FindingOut,FindingAction,CommentCreate,CommentOut,ApprovalCreate,ApprovalOut
-from app.services.review_service import run_full_review,get_insights
+from app.models.draft import Draft,Finding,Comment,Approval,Revision,AIDisclosureLog,DraftStatus,FindingStatus
+from app.schemas.draft import DraftCreate,DraftOut,DraftWithFindings,FindingOut,FindingAction,CommentCreate,CommentOut,ApprovalCreate,ApprovalOut,RevisionOut
+from app.services.review_service import run_full_review
+from app.services.file_parser import parse_document
+import os,shutil,uuid
 
 router=APIRouter(prefix="/api/drafts",tags=["drafts"])
 
@@ -24,6 +26,46 @@ def create_draft(payload:DraftCreate,db:Session=Depends(get_db),current_user:Use
     db.add(draft)
     db.commit()
     db.refresh(draft)
+    rev=Revision(draft_id=draft.id,revision_number=1,content=draft.content,author_id=current_user.id,change_summary="Initial draft")
+    db.add(rev)
+    db.commit()
+    return draft
+
+@router.post("/upload",response_model=DraftOut,status_code=201)
+def upload_draft_file(
+    workspace_id:int=Form(...),
+    title:str=Form(...),
+    channel:Optional[str]=Form(None),
+    purpose:Optional[str]=Form(None),
+    file:UploadFile=File(...),
+    db:Session=Depends(get_db),
+    current_user:User=Depends(get_current_user)
+):
+    os.makedirs("uploads",exist_ok=True)
+    suffix=os.path.splitext(file.filename)[1].lower()
+    fname=f"{uuid.uuid4().hex}{suffix}"
+    fpath=os.path.join("uploads",fname)
+    with open(fpath,"wb") as buffer:
+        shutil.copyfileobj(file.file,buffer)
+    parsed=parse_document(fpath)
+    text_content=parsed.get('text','').strip() or f"Uploaded file: {file.filename}"
+    draft=Draft(
+        workspace_id=workspace_id,
+        creator_id=current_user.id,
+        title=title,
+        content=text_content,
+        channel=channel,
+        purpose=purpose,
+        file_path=fpath,
+        file_type=parsed.get('type','file'),
+        status=DraftStatus.draft,
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    rev=Revision(draft_id=draft.id,revision_number=1,content=draft.content,author_id=current_user.id,change_summary=f"Uploaded {file.filename}")
+    db.add(rev)
+    db.commit()
     return draft
 
 @router.get("",response_model=List[DraftOut])
@@ -62,6 +104,20 @@ def act_on_finding(draft_id:int,finding_id:int,payload:FindingAction,db:Session=
         raise HTTPException(400,"action must be accept, dispute, or dismiss")
     if action=='accept':
         finding.status=FindingStatus.accepted
+        if finding.suggested_fix and finding.quoted_content:
+            draft=db.query(Draft).filter(Draft.id==draft_id).first()
+            if draft and finding.quoted_content in draft.content:
+                new_content=draft.content.replace(finding.quoted_content,finding.suggested_fix,1)
+                draft.content=new_content
+                rev_count=db.query(Revision).filter(Revision.draft_id==draft_id).count()
+                rev=Revision(
+                    draft_id=draft.id,
+                    revision_number=rev_count+1,
+                    content=new_content,
+                    author_id=current_user.id,
+                    change_summary=f"Accepted fix: replaced '{finding.quoted_content}' with '{finding.suggested_fix}'"
+                )
+                db.add(rev)
     elif action=='dispute':
         finding.status=FindingStatus.disputed
         finding.dispute_reason=payload.dispute_reason
@@ -118,4 +174,3 @@ def delete_draft(draft_id:int,db:Session=Depends(get_db),current_user:User=Depen
         raise HTTPException(403,"Forbidden")
     db.delete(draft)
     db.commit()
-

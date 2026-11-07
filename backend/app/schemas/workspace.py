@@ -5,11 +5,24 @@ from datetime import datetime
 class WorkspaceCreate(BaseModel):
     name:str
     description:Optional[str]=None
+    confidential_mode:bool=False
+    rule_only_mode:bool=False
+    protected_terms:Optional[str]=None
+
+class WorkspaceUpdate(BaseModel):
+    name:Optional[str]=None
+    description:Optional[str]=None
+    confidential_mode:Optional[bool]=None
+    rule_only_mode:Optional[bool]=None
+    protected_terms:Optional[str]=None
 
 class WorkspaceOut(BaseModel):
     id:int
     name:str
     description:Optional[str]
+    confidential_mode:bool
+    rule_only_mode:bool
+    protected_terms:Optional[str]
     created_at:datetime
     class Config:
         from_attributes=True
@@ -62,4 +75,3 @@ class FactOut(BaseModel):
     created_at:datetime
     class Config:
         from_attributes=True
-

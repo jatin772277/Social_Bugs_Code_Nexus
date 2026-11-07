@@ -42,6 +42,8 @@ class Draft(Base):
     findings=relationship("Finding",back_populates="draft",cascade="all,delete-orphan")
     comments=relationship("Comment",back_populates="draft",cascade="all,delete-orphan")
     approvals=relationship("Approval",back_populates="draft",cascade="all,delete-orphan")
+    revisions=relationship("Revision",back_populates="draft",cascade="all,delete-orphan")
+    disclosure_logs=relationship("AIDisclosureLog",back_populates="draft",cascade="all,delete-orphan")
 
 class Finding(Base):
     __tablename__="findings"
@@ -85,3 +87,24 @@ class Approval(Base):
     draft=relationship("Draft",back_populates="approvals")
     approver=relationship("User")
 
+class Revision(Base):
+    __tablename__="revisions"
+    id=Column(Integer,primary_key=True,index=True)
+    draft_id=Column(Integer,ForeignKey("drafts.id"),nullable=False)
+    revision_number=Column(Integer,default=1,nullable=False)
+    content=Column(Text,nullable=False)
+    author_id=Column(Integer,ForeignKey("users.id"),nullable=True)
+    change_summary=Column(String,nullable=True)
+    created_at=Column(DateTime(timezone=True),server_default=func.now())
+    draft=relationship("Draft",back_populates="revisions")
+    author=relationship("User")
+
+class AIDisclosureLog(Base):
+    __tablename__="ai_disclosure_logs"
+    id=Column(Integer,primary_key=True,index=True)
+    draft_id=Column(Integer,ForeignKey("drafts.id"),nullable=False)
+    service_name=Column(String,nullable=False)
+    masked_terms_count=Column(Integer,default=0)
+    masked_preview=Column(Text,nullable=True)
+    dispatched_at=Column(DateTime(timezone=True),server_default=func.now())
+    draft=relationship("Draft",back_populates="disclosure_logs")

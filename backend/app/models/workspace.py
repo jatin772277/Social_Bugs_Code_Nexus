@@ -8,6 +8,9 @@ class Workspace(Base):
     id=Column(Integer,primary_key=True,index=True)
     name=Column(String,nullable=False)
     description=Column(Text,nullable=True)
+    confidential_mode=Column(Boolean,default=False)
+    rule_only_mode=Column(Boolean,default=False)
+    protected_terms=Column(Text,nullable=True)
     created_at=Column(DateTime(timezone=True),server_default=func.now())
     members=relationship("User",back_populates="workspace")
     guidelines=relationship("Guideline",back_populates="workspace")
@@ -57,4 +60,3 @@ class ApprovedFact(Base):
     expires_at=Column(DateTime(timezone=True),nullable=True)
     created_at=Column(DateTime(timezone=True),server_default=func.now())
     workspace=relationship("Workspace",back_populates="approved_facts")
-

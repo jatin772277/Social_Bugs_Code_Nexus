@@ -73,8 +73,30 @@ class ApprovalOut(BaseModel):
     class Config:
         from_attributes=True
 
+class RevisionOut(BaseModel):
+    id:int
+    draft_id:int
+    revision_number:int
+    content:str
+    author_id:Optional[int]
+    change_summary:Optional[str]
+    created_at:datetime
+    class Config:
+        from_attributes=True
+
+class AIDisclosureLogOut(BaseModel):
+    id:int
+    draft_id:int
+    service_name:str
+    masked_terms_count:int
+    masked_preview:Optional[str]
+    dispatched_at:datetime
+    class Config:
+        from_attributes=True
+
 class DraftWithFindings(DraftOut):
     findings:List[FindingOut]=[]
     comments:List[CommentOut]=[]
     approvals:List[ApprovalOut]=[]
-
+    revisions:List[RevisionOut]=[]
+    disclosure_logs:List[AIDisclosureLogOut]=[]

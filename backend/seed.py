@@ -32,7 +32,16 @@ Our brand voice is confident, clear and human. We avoid jargon, excessive formal
 def seed():
     Base.metadata.create_all(bind=engine)
     db=SessionLocal()
-    ws=Workspace(name="Demo Brand Workspace",description="Sample workspace pre-loaded with brand guidelines")
+    if db.query(User).filter(User.email=="admin@codenexus.demo").first():
+        db.close()
+        return
+    ws=Workspace(
+        name="Social Bugs Demo Brand",
+        description="Official brand governance workspace for Inkloom AI challenge",
+        confidential_mode=True,
+        rule_only_mode=False,
+        protected_terms="Project Nebula, confidential release, secret-key-x"
+    )
     db.add(ws)
     db.commit()
     db.refresh(ws)
@@ -60,12 +69,6 @@ def seed():
     db.commit()
     db.close()
     print("Seed complete.")
-    print("Demo accounts:")
-    print("  admin@codenexus.demo / admin123")
-    print("  manager@codenexus.demo / manager123")
-    print("  creator@codenexus.demo / creator123")
-    print("  reviewer@codenexus.demo / reviewer123")
 
 if __name__=='__main__':
     seed()
-
